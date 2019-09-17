@@ -1,20 +1,3 @@
-/**
- * Copyright (c) 2017, Arm Limited and affiliates.
- * SPDX-License-Identifier: Apache-2.0
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #include "lorawan/LoRaRadio.h"
 
 #ifndef APP_LORA_RADIO_HELPER_H_
@@ -23,53 +6,19 @@
 #include "SX1272_LoRaRadio.h"
 #include "SX1276_LoRaRadio.h"
 
-#define SX1272   0xFF
-#define SX1276   0xEE
+#define PIN_RADIO_NSS D10       /* Not Slave Select */
+#define PIN_RADIO_MOSI D11      /* MOSI */
+#define PIN_RADIO_MISO D12      /* MISO */
+#define PIN_RADIO_SCLK D13      /* SCLK */
+#define PIN_RADIO_RST A0        /* RST */
+#define PIN_RADIO_RXTX A4       /* RXTX */
+#define PIN_RADIO_DIO0 D2       /* DIO 0 */
+#define PIN_RADIO_DIO1 D3       /* DIO 1 */
+#define PIN_RADIO_DIO2 D4       /* DIO 2 */
 
-#if (MBED_CONF_APP_LORA_RADIO == SX1272)
-
-SX1272_LoRaRadio radio(MBED_CONF_APP_LORA_SPI_MOSI,
-                       MBED_CONF_APP_LORA_SPI_MISO,
-                       MBED_CONF_APP_LORA_SPI_SCLK,
-                       MBED_CONF_APP_LORA_CS,
-                       MBED_CONF_APP_LORA_RESET,
-                       MBED_CONF_APP_LORA_DIO0,
-                       MBED_CONF_APP_LORA_DIO1,
-                       MBED_CONF_APP_LORA_DIO2,
-                       MBED_CONF_APP_LORA_DIO3,
-                       MBED_CONF_APP_LORA_DIO4,
-                       MBED_CONF_APP_LORA_DIO5,
-                       MBED_CONF_APP_LORA_RF_SWITCH_CTL1,
-                       MBED_CONF_APP_LORA_RF_SWITCH_CTL2,
-                       MBED_CONF_APP_LORA_TXCTL,
-                       MBED_CONF_APP_LORA_RXCTL,
-                       MBED_CONF_APP_LORA_ANT_SWITCH,
-                       MBED_CONF_APP_LORA_PWR_AMP_CTL,
-                       MBED_CONF_APP_LORA_TCXO);
-
-#elif (MBED_CONF_APP_LORA_RADIO == SX1276)
-
-SX1276_LoRaRadio radio(MBED_CONF_APP_LORA_SPI_MOSI,
-                       MBED_CONF_APP_LORA_SPI_MISO,
-                       MBED_CONF_APP_LORA_SPI_SCLK,
-                       MBED_CONF_APP_LORA_CS,
-                       MBED_CONF_APP_LORA_RESET,
-                       MBED_CONF_APP_LORA_DIO0,
-                       MBED_CONF_APP_LORA_DIO1,
-                       MBED_CONF_APP_LORA_DIO2,
-                       MBED_CONF_APP_LORA_DIO3,
-                       MBED_CONF_APP_LORA_DIO4,
-                       MBED_CONF_APP_LORA_DIO5,
-                       MBED_CONF_APP_LORA_RF_SWITCH_CTL1,
-                       MBED_CONF_APP_LORA_RF_SWITCH_CTL2,
-                       MBED_CONF_APP_LORA_TXCTL,
-                       MBED_CONF_APP_LORA_RXCTL,
-                       MBED_CONF_APP_LORA_ANT_SWITCH,
-                       MBED_CONF_APP_LORA_PWR_AMP_CTL,
-                       MBED_CONF_APP_LORA_TCXO);
-
-#else
-#error "Unknown LoRa radio specified (SX1272,SX1276 are valid)"
-#endif
+SX1276_LoRaRadio radio(PIN_RADIO_MOSI, PIN_RADIO_MISO, PIN_RADIO_SCLK,
+                       PIN_RADIO_NSS, PIN_RADIO_RST, PIN_RADIO_DIO0,
+                       PIN_RADIO_DIO1, PIN_RADIO_DIO2, NC, NC, NC,
+                       NC, NC, NC, NC, NC, NC, NC);
 
 #endif /* APP_LORA_RADIO_HELPER_H_ */

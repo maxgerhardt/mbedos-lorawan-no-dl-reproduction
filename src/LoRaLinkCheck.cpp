@@ -1,17 +1,19 @@
 #include "LoRaLinkCheck.h"
-#include "LoRaWAN_Stack.h"
 #include <global_objects.h>
 #include <EventQueue.h>
 #include <LoRaWANInterface.h>
 #include <EventQueue.h>
-#include <psg_debug.h>
 #include <mbed_trace.h>
 
 using namespace events;
 
 LoRaLinkCheckResult LoRaLinkCheck::linkCheckResult = LORA_LINKCHECK_RESULT_NO_CONNECTION;
 
-extern void trace_printf(const char* str);
+//just replace physec debug log lib functions with normal printf for now..
+#define psg_printf(level, args...) printf(args)
+uint8_t LoRaWAN_ConvertSFToDR(int sf);
+void LoRaWAN_SetChannelPlan(const lorawan_channelplan_t &channelPlan);
+void LoRa_AddChannelWithMask(uint8_t channelMask);
 
 /**
  * Save result in variable and stop processing the LoRa event queue.
@@ -23,7 +25,7 @@ extern void trace_printf(const char* str);
 bool LoRaLinkCheck::Init(int maxUplinkTries, int sf) {
     /*mbed_trace_init();
     mbed_trace_config_set(TRACE_ACTIVE_LEVEL_ALL);
-    mbed_trace_print_function_set(&trace_printf);
+    //mbed_trace_print_function_set(&trace_printf);
      */
 
     // Initialize LoRaWAN stack
@@ -44,17 +46,20 @@ bool LoRaLinkCheck::Init(int maxUplinkTries, int sf) {
                    "\r\n set_confirmed_msg_retries failed! \r\n\r\n");
         return false;
     }
+    lorawan->disable_adaptive_datarate();
 
     psg_printf(LOG_INFO, "CONFIRMED message retries : %d \r\n", maxUplinkTries);
 
     uint8_t dr = LoRaWAN_ConvertSFToDR(sf);
-    if (lorawan->set_datarate(dr) != LORAWAN_STATUS_OK) {
-        psg_printf(LOG_FATAL, "failed to set dataratate \r\n");
+    lorawan_status_t ret;
+    if ((ret = lorawan->set_datarate(dr)) != LORAWAN_STATUS_OK) {
+        psg_printf(LOG_FATAL, "failed to set dataratate: %d\r\n", (int) ret);
         return false;
     }
 
     //Either use all available TTN channels, or use only those
     //which are enabled by the channel mask setting.
+#define LORA_USE_CHANNEL_MASK 0xff
 #ifdef LORA_USE_CHANNEL_MASK
     LoRa_AddChannelWithMask((uint8_t) LORA_USE_CHANNEL_MASK);
 #else
@@ -65,6 +70,7 @@ bool LoRaLinkCheck::Init(int maxUplinkTries, int sf) {
 
 LoRaLinkCheckResult LoRaLinkCheck::DoLinkCheck(lorawan_connect_t* connectParams) {
     lorawan_status_t retcode;
+    linkCheckResult = LORA_LINKCHECK_RESULT_NO_CONNECTION;
     retcode = lorawan->connect(*connectParams);
     if (retcode == LORAWAN_STATUS_OK ||
         retcode == LORAWAN_STATUS_CONNECT_IN_PROGRESS) {
@@ -104,6 +110,10 @@ void LoRaLinkCheck::EventHandler(lorawan_event_t event) {
                        (int) txMeta.channel, (int) txMeta.tx_power,
                        (int) txMeta.nb_retries);
             psg_printf(LOG_SUCCESS, "Message Sent to Network Server \r\n");
+            if(linkCheckResult != LORA_LINKCHECK_RESULT_OK) {
+                linkCheckResult = LORA_LINKCHECK_RESULT_NO_CONNECTION;
+            }
+            lorawan->disconnect();
             break;
         case TX_TIMEOUT:
         case TX_CRYPTO_ERROR:
@@ -113,8 +123,7 @@ void LoRaLinkCheck::EventHandler(lorawan_event_t event) {
             END_LINKCHECK(LORA_LINKCHECK_RESULT_TX_FAILED);
             break;
         case TX_ERROR:
-            psg_printf(LOG_FATAL, "Uplink retries exhausted without getting confirmed downlink.. \r\n",
-                       event);
+            psg_printf(LOG_FATAL, "Uplink retries exhausted without getting confirmed downlink.. \r\n");
             END_LINKCHECK(LORA_LINKCHECK_RESULT_NO_CONNECTION);
             break;
         case RX_DONE:
@@ -170,7 +179,7 @@ bool LoRaLinkCheck::QueuePacket() {
         return false;
     }
 
-    retcode = lorawan->send(port, payload, sizeof(payload), MSG_CONFIRMED_FLAG);
+    retcode = lorawan->send(port, payload, sizeof(payload), MSG_UNCONFIRMED_FLAG);
 
     if (retcode < 0) {
         if (retcode == LORAWAN_STATUS_WOULD_BLOCK) {
@@ -185,4 +194,81 @@ bool LoRaLinkCheck::QueuePacket() {
         return false;
     }
     return true;
+}
+
+uint8_t LoRaWAN_ConvertSFToDR(int sf) {
+    uint8_t lorawan_dr = DR_0;
+    switch (sf) {
+        case 12:
+            lorawan_dr = DR_0;
+            break;
+        case 11:
+            lorawan_dr = DR_1;
+            break;
+        case 10:
+            lorawan_dr = DR_2;
+            break;
+        case 9:
+            lorawan_dr = DR_3;
+            break;
+        case 8:
+            lorawan_dr = DR_4;
+            break;
+        case 7:
+            lorawan_dr = DR_5;
+            break;
+        default:
+            break;
+    }
+    return lorawan_dr;
+}
+
+/* https://www.thethingsnetwork.org/docs/lorawan/frequency-plans.html#eu863-870 */
+static loramac_channel_t ttnChannels[] = {
+        {0, {868100000, 0, {(DR_5 << 4) | DR_0}, 1}},
+        {1, {868300000, 0, {(DR_5 << 4) | DR_0}, 1}},
+        {2, {868500000, 0, {(DR_5 << 4) | DR_0}, 1}},
+        {3, {867100000, 0, {(DR_5 << 4) | DR_0}, 0}},
+        {4, {867300000, 0, {(DR_5 << 4) | DR_0}, 0}},
+        {5, {867500000, 0, {(DR_5 << 4) | DR_0}, 0}},
+        {6, {867700000, 0, {(DR_5 << 4) | DR_0}, 0}},
+        {7, {867900000, 0, {(DR_5 << 4) | DR_0}, 0}}
+};
+
+void LoRa_AddChannelWithMask(uint8_t channelMask) {
+    lorawan_channelplan_t channelPlan{};
+    //To supress the warning "variable escapes local scope"
+    // this doesn't logically happen anyways
+    loramac_channel_t channels[8];
+    channelPlan.channels = channels;
+    channelPlan.channels = (loramac_channel_t*) channels;
+
+    //Parse new channels
+    uint8_t usedChannels = 0;
+    for (uint8_t i = 0; i < 8; i++) {
+        //Is this bit set?
+        if (channelMask & (1u << i)) {
+            //Then take a copy of this channel and
+            //put it in the channel plan
+            channels[usedChannels] = ttnChannels[i];
+            usedChannels++;
+        }
+    }
+    channelPlan.nb_channels = usedChannels;
+    LoRaWAN_SetChannelPlan(channelPlan);
+}
+
+void LoRaWAN_SetChannelPlan(const lorawan_channelplan_t &channelPlan) {
+    lorawan_status_t ret;
+    psg_printf(LOG_INFO, "Setting channel plan with %d channels.\n",
+               (int) channelPlan.nb_channels);
+    //remove previously set channel plan
+    if ((ret = lorawan->remove_channel_plan()) != LORAWAN_STATUS_OK) {
+        psg_printf(LOG_FATAL, "[+] Removing old channels failed: %d\n", (int) ret);
+        //still try to set new channel plan
+    }
+    if ((ret = lorawan->set_channel_plan(channelPlan)) != LORAWAN_STATUS_OK) {
+        psg_printf(LOG_FATAL,
+                   "[-] Failed to set TTN channels! Debug return code: %d\n", (int) ret);
+    }
 }
